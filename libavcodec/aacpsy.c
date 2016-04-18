@@ -891,7 +891,7 @@ static FFPsyWindowInfo psy_lame_window(FFPsyContext *ctx, const float *audio,
 
     if (la) {
         float hpfsmpl[AAC_BLOCK_SIZE_LONG];
-        float const *pf = hpfsmpl;
+        const float *pf = hpfsmpl;
         float attack_intensity[(AAC_NUM_BLOCKS_SHORT + 1) * PSY_LAME_NUM_SUBBLOCKS];
         float energy_subshort[(AAC_NUM_BLOCKS_SHORT + 1) * PSY_LAME_NUM_SUBBLOCKS];
         float energy_short[AAC_NUM_BLOCKS_SHORT + 1] = { 0 };
@@ -910,7 +910,7 @@ static FFPsyWindowInfo psy_lame_window(FFPsyContext *ctx, const float *audio,
         }
 
         for (i = 0; i < AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS; i++) {
-            float const *const pfe = pf + AAC_BLOCK_SIZE_LONG / (AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS);
+            const float *const pfe = pf + AAC_BLOCK_SIZE_LONG / (AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS);
             float p = 1.0f;
             for (; pf < pfe; pf++)
                 p = FFMAX(p, fabsf(*pf));
@@ -943,9 +943,9 @@ static FFPsyWindowInfo psy_lame_window(FFPsyContext *ctx, const float *audio,
         /* GB: tuned (1) to avoid too many short blocks for test sample TRUMPET */
         /* RH: tuned (2) to let enough short blocks through for test sample FSOL and SNAPS */
         for (i = 1; i < AAC_NUM_BLOCKS_SHORT + 1; i++) {
-            float const u = energy_short[i - 1];
-            float const v = energy_short[i];
-            float const m = FFMAX(u, v);
+            const float u = energy_short[i - 1];
+            const float v = energy_short[i];
+            const float m = FFMAX(u, v);
             if (m < 40000) {                          /* (2) */
                 if (u < 1.7f * v && v < 1.7f * u) {   /* (1) */
                     if (i == 1 && attacks[0] < attacks[i])
@@ -974,21 +974,6 @@ static FFPsyWindowInfo psy_lame_window(FFPsyContext *ctx, const float *audio,
     }
 
     lame_apply_block_type(pch, &wi, uselongblock);
-
-    /* Calculate input sample maximums and evaluate clipping risk */
-    if (audio) {
-        for (i = 0; i < AAC_NUM_BLOCKS_SHORT; i++) {
-            const float *wbuf = audio + i * AAC_BLOCK_SIZE_SHORT;
-            float max = 0;
-            int j;
-            for (j = 0; j < AAC_BLOCK_SIZE_SHORT; j++)
-                max = FFMAX(max, fabsf(wbuf[j]));
-            clippings[i] = max;
-        }
-    } else {
-        for (i = 0; i < 8; i++)
-            clippings[i] = 0;
-    }
 
     wi.window_type[1] = prev_type;
     if (wi.window_type[0] != EIGHT_SHORT_SEQUENCE) {
