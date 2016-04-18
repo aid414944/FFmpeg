@@ -59,12 +59,8 @@ OBJS-$(CONFIG_RTPDEC)                    += rdt.o                       \
                                             rtpdec_vp9.o                \
                                             rtpdec_xiph.o
 OBJS-$(CONFIG_RTPENC_CHAIN)              += rtpenc_chain.o rtp.o
-<<<<<<< HEAD
-#OBJS-$(CONFIG_SHARED)                    += log2_tab.o golomb_tab.o
-=======
 OBJS-$(CONFIG_SHARED)                    += log2_tab.o golomb_tab.o
 OBJS-$(CONFIG_SRTP)                      += srtp.o
->>>>>>> 1b381f1e78f10183b601979dbc35aac6eb952308
 
 # muxers/demuxers
 OBJS-$(CONFIG_A64_MUXER)                 += a64.o rawenc.o
