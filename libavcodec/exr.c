@@ -73,11 +73,13 @@ enum ExrTileLevelMode {
     EXR_TILE_LEVEL_ONE,
     EXR_TILE_LEVEL_MIPMAP,
     EXR_TILE_LEVEL_RIPMAP,
+    EXR_TILE_LEVEL_UNKNOWN,
 };
 
 enum ExrTileLevelRound {
     EXR_TILE_ROUND_UP,
     EXR_TILE_ROUND_DOWN,
+    EXR_TILE_ROUND_UNKNOWN,
 };
 
 typedef struct EXRChannel {
@@ -518,7 +520,8 @@ static int huf_decode(const uint64_t *hcode, const HufDec *hdecod,
     uint16_t *outb    = out;
     uint16_t *oe      = out + no;
     const uint8_t *ie = gb->buffer + (nbits + 7) / 8; // input byte size
-    uint8_t cs, s;
+    uint8_t cs;
+    uint16_t s;
     int i, lc = 0;
 
     while (gb->buffer < ie) {
@@ -766,7 +769,7 @@ static int piz_uncompress(EXRContext *s, const uint8_t *src, int ssize,
     if (min_non_zero <= max_non_zero)
         bytestream2_get_buffer(&gb, td->bitmap + min_non_zero,
                                max_non_zero - min_non_zero + 1);
-    memset(td->bitmap + max_non_zero, 0, BITMAP_SIZE - max_non_zero);
+    memset(td->bitmap + max_non_zero + 1, 0, BITMAP_SIZE - max_non_zero - 1);
 
     maxval = reverse_lut(td->bitmap, td->lut);
 
@@ -1011,9 +1014,9 @@ static int decode_block(AVCodecContext *avctx, void *tdata,
         if (data_size <= 0 || data_size > buf_size)
             return AVERROR_INVALIDDATA;
 
-        if (tileLevelX || tileLevelY) { /* tile of low resolution (Mipmap, rimmap) */
-            av_log(s->avctx, AV_LOG_ERROR, "Wrong Tile level %i / %i.\n", tileLevelX, tileLevelY);
-            return AVERROR_INVALIDDATA;
+        if (tileLevelX || tileLevelY) { /* tile level, is not the full res level */
+            avpriv_report_missing_feature(s->avctx, "Subres tile before full res tile");
+            return AVERROR_PATCHWELCOME;
         }
 
         line = s->tile_attr.ySize * tileY;
@@ -1380,15 +1383,17 @@ static int decode_header(EXRContext *s)
                     return AVERROR_PATCHWELCOME;
                 }
 
-                if (channel_index >= 0) {
-                    if (s->pixel_type != EXR_UNKNOWN &&
-                        s->pixel_type != current_pixel_type) {
-                        av_log(s->avctx, AV_LOG_ERROR,
-                               "RGB channels not of the same depth.\n");
-                        return AVERROR_INVALIDDATA;
+                if (s->channel_offsets[channel_index] == -1){/* channel have not been previously assign */
+                    if (channel_index >= 0) {
+                        if (s->pixel_type != EXR_UNKNOWN &&
+                            s->pixel_type != current_pixel_type) {
+                            av_log(s->avctx, AV_LOG_ERROR,
+                                   "RGB channels not of the same depth.\n");
+                            return AVERROR_INVALIDDATA;
+                        }
+                        s->pixel_type                     = current_pixel_type;
+                        s->channel_offsets[channel_index] = s->current_channel_offset;
                     }
-                    s->pixel_type                     = current_pixel_type;
-                    s->channel_offsets[channel_index] = s->current_channel_offset;
                 }
 
                 s->channels = av_realloc(s->channels,
@@ -1479,6 +1484,8 @@ static int decode_header(EXRContext *s)
             continue;
         } else if ((var_size = check_header_variable(s, "tiles",
                                                      "tiledesc", 22)) >= 0) {
+            char tileLevel;
+
             if (!s->is_tile)
                 av_log(s->avctx, AV_LOG_WARNING,
                        "Found tile attribute and scanline flags. Exr will be interpreted as scanline.\n");
@@ -1486,17 +1493,17 @@ static int decode_header(EXRContext *s)
             s->tile_attr.xSize = bytestream2_get_le32(&s->gb);
             s->tile_attr.ySize = bytestream2_get_le32(&s->gb);
 
-            char tileLevel = bytestream2_get_byte(&s->gb);
+            tileLevel = bytestream2_get_byte(&s->gb);
             s->tile_attr.level_mode = tileLevel & 0x0f;
             s->tile_attr.level_round = (tileLevel >> 4) & 0x0f;
 
-            if (s->tile_attr.level_mode != EXR_TILE_LEVEL_ONE) {
+            if (s->tile_attr.level_mode >= EXR_TILE_LEVEL_UNKNOWN){
                 avpriv_report_missing_feature(s->avctx, "Tile level mode %d",
                                               s->tile_attr.level_mode);
                 return AVERROR_PATCHWELCOME;
             }
 
-            if (s->tile_attr.level_round != EXR_TILE_ROUND_UP) {
+            if (s->tile_attr.level_round >= EXR_TILE_ROUND_UNKNOWN) {
                 avpriv_report_missing_feature(s->avctx, "Tile level round %d",
                                               s->tile_attr.level_round);
                 return AVERROR_PATCHWELCOME;
